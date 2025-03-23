@@ -1,0 +1,85 @@
+version: '3.8'
+
+services:
+  # Databases
+  auth-db:
+    image: postgres:13-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: auth_db
+    volumes:
+      - auth-db-data:/var/lib/postgresql/data
+    networks:
+      - ezeats-net
+
+  order-db:
+    image: postgres:13-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: order_db
+    volumes:
+      - order-db-data:/var/lib/postgresql/data
+    networks:
+      - ezeats-net
+
+  # Services
+  auth-service:
+    build: ./auth-service
+    # No public port exposure - only internal TCP communication
+    expose:
+      - "3001"
+    environment:
+      DB_HOST: auth-db
+      DB_PORT: 5432
+      DB_USERNAME: postgres
+      DB_PASSWORD: password
+      DB_NAME: auth_db
+      JWT_SECRET: 'SeCrEt$$BuRgEr'
+      JWT_EXPIRES_IN: 1h
+    networks:
+      - ezeats-net
+    depends_on:
+      - auth-db
+
+  order-service:
+    build: ./order-service
+    # No public port exposure - only internal TCP communication
+    expose:
+      - "3002"
+    environment:
+      DB_HOST: order-db
+      DB_PORT: 5432
+      DB_USERNAME: postgres
+      DB_PASSWORD: password
+      DB_NAME: order_db
+      AUTH_SERVICE_HOST: auth-service
+      AUTH_SERVICE_PORT: 3001
+    networks:
+      - ezeats-net
+    depends_on:
+      - order-db
+      - auth-service
+
+  api-gateway:
+    build: ./api-gateway
+    # Only the API Gateway exposes a public HTTP port
+    ports:
+      - "3000:3000"
+    environment:
+      AUTH_SERVICE_URL: auth-service:3001
+      ORDER_SERVICE_URL: order-service:3002
+    networks:
+      - ezeats-net
+    depends_on:
+      - auth-service
+      - order-service
+
+volumes:
+  auth-db-data:
+  order-db-data:
+
+networks:
+  ezeats-net:
+    driver: bridge
